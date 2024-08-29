@@ -1,179 +1,144 @@
-// Sketch to draw an analogue clock on the screen
-// This uses anti-aliased drawing functions that are built into TFT_eSPI
-
-// Anti-aliased lines can be drawn with sub-pixel resolution and permit lines to be
-// drawn with less jaggedness.
-
-// Based on a sketch by DavyLandman:
-// https://github.com/Bodmer/TFT_eSPI/issues/905
-
-
-#define WIFI_SSID      "Bull"
-#define WIFI_PASSWORD  "CHE*ddar"
+/*Using LVGL with Arduino requires some extra steps:
+ *Be sure to read the docs here: https://docs.lvgl.io/master/integration/framework/arduino.html  */
 
 #include <Arduino.h>
-#include <TFT_eSPI.h> // Master copy here: https://github.com/Bodmer/TFT_eSPI
-#include <SPI.h>
+#include <lvgl.h>
 
-#include "NotoSansBold15.h"
+#if LV_USE_TFT_ESPI
+#include <TFT_eSPI.h>
+#endif
 
-TFT_eSPI tft = TFT_eSPI();  // Invoke library, pins defined in User_Setup.h
-TFT_eSprite face = TFT_eSprite(&tft);
+/*To use the built-in examples and demos of LVGL uncomment the includes below respectively.
+ *You also need to copy `lvgl/examples` to `lvgl/src/examples`. Similarly for the demos `lvgl/demos` to `lvgl/src/demos`.
+ *Note that the `lv_examples` library is for LVGL v7 and you shouldn't install it for this version (since LVGL v8)
+ *as the examples and demos are now part of the main LVGL library. */
 
-#define CLOCK_X_POS 10
-#define CLOCK_Y_POS 10
+//#include <examples/lv_examples.h>
+//#include <demos/lv_demos.h>
 
-#define CLOCK_FG   TFT_SKYBLUE
-#define CLOCK_BG   TFT_NAVY
-#define SECCOND_FG TFT_RED
-#define LABEL_FG   TFT_GOLD
+/*Set to your screen resolution and rotation*/
+#define TFT_HOR_RES   280
+#define TFT_VER_RES   240
+#define TFT_ROTATION  LV_DISPLAY_ROTATION_0
 
-#define CLOCK_R       127.0f / 2.0f // Clock face radius (float type)
-#define H_HAND_LENGTH CLOCK_R/2.0f
-#define M_HAND_LENGTH CLOCK_R/1.4f
-#define S_HAND_LENGTH CLOCK_R/1.3f
+/*LVGL draw into this buffer, 1/10 screen size usually works well. The size is in bytes*/
+#define DRAW_BUF_SIZE (TFT_HOR_RES * TFT_VER_RES / 10 * (LV_COLOR_DEPTH / 8))
+uint32_t draw_buf[DRAW_BUF_SIZE / 4];
 
-#define FACE_W CLOCK_R * 2 + 1
-#define FACE_H CLOCK_R * 2 + 1
-
-// Calculate 1 second increment angles. Hours and minute hand angles
-// change every second so we see smooth sub-pixel movement
-#define SECOND_ANGLE 360.0 / 60.0
-#define MINUTE_ANGLE SECOND_ANGLE / 60.0
-#define HOUR_ANGLE   MINUTE_ANGLE / 12.0
-
-// Sprite width and height
-#define FACE_W CLOCK_R * 2 + 1
-#define FACE_H CLOCK_R * 2 + 1
-
-// Time h:m:s
-uint8_t h = 0, m = 0, s = 0;
-
-float time_secs = h * 3600 + m * 60 + s;
-
-// Load header after time_secs global variable has been created so it is in scope
-#include "NTP_Time.h" // Attached to this sketch, see that tab for library needs
-
-// Time for next tick
-uint32_t targetTime = 0;
-
-// =========================================================================
-// Get coordinates of end of a line, pivot at x,y, length r, angle a
-// =========================================================================
-// Coordinates are returned to caller via the xp and yp pointers
-#define DEG2RAD 0.0174532925
-void getCoord(int16_t x, int16_t y, float *xp, float *yp, int16_t r, float a)
+#if LV_USE_LOG != 0
+void my_print( lv_log_level_t level, const char * buf )
 {
-  float sx1 = cos( (a - 90) * DEG2RAD);
-  float sy1 = sin( (a - 90) * DEG2RAD);
-  *xp =  sx1 * r + x;
-  *yp =  sy1 * r + y;
+    LV_UNUSED(level);
+    Serial.println(buf);
+    Serial.flush();
+}
+#endif
+
+/* LVGL calls it when a rendered image needs to copied to the display*/
+void my_disp_flush( lv_display_t *disp, const lv_area_t *area, uint8_t * px_map)
+{
+    /*Copy `px map` to the `area`*/
+
+    /*For example ("my_..." functions needs to be implemented by you)
+    uint32_t w = lv_area_get_width(area);
+    uint32_t h = lv_area_get_height(area);
+
+    my_set_window(area->x1, area->y1, w, h);
+    my_draw_bitmaps(px_map, w * h);
+     */
+
+    /*Call it to tell LVGL you are ready*/
+    lv_display_flush_ready(disp);
 }
 
-// =========================================================================
-// Draw the clock face in the sprite
-// =========================================================================
-static void renderFace(float t) {
-  float h_angle = t * HOUR_ANGLE;
-  float m_angle = t * MINUTE_ANGLE;
-  float s_angle = t * SECOND_ANGLE;
+/*Read the touchpad*/
+void my_touchpad_read( lv_indev_t * indev, lv_indev_data_t * data )
+{
+    /*For example  ("my_..." functions needs to be implemented by you)
+    int32_t x, y;
+    bool touched = my_get_touch( &x, &y );
 
-  // The face is completely redrawn - this can be done quickly
-  face.fillSprite(TFT_BLACK);
+    if(!touched) {
+        data->state = LV_INDEV_STATE_RELEASED;
+    } else {
+        data->state = LV_INDEV_STATE_PRESSED;
 
-  // Draw the face circle
-  face.fillSmoothCircle( CLOCK_R, CLOCK_R, CLOCK_R, CLOCK_BG );
-
-  // Set text datum to middle centre and the colour
-  face.setTextDatum(MC_DATUM);
-
-  // The background colour will be read during the character rendering
-  face.setTextColor(CLOCK_FG, CLOCK_BG);
-
-  // Text offset adjustment
-  constexpr uint32_t dialOffset = CLOCK_R - 10;
-
-  float xp = 0.0, yp = 0.0; // Use float pixel position for smooth AA motion
-
-  // Draw digits around clock perimeter
-  for (uint32_t h = 1; h <= 12; h++) {
-    getCoord(CLOCK_R, CLOCK_R, &xp, &yp, dialOffset, h * 360.0 / 12);
-    face.drawNumber(h, xp, 2 + yp);
-  }
-
-  // Add text (could be digital time...)
-  face.setTextColor(LABEL_FG, CLOCK_BG);
-  face.drawString("TFT_eSPI", CLOCK_R, CLOCK_R * 0.75);
-
-  // Draw minute hand
-  getCoord(CLOCK_R, CLOCK_R, &xp, &yp, M_HAND_LENGTH, m_angle);
-  face.drawWideLine(CLOCK_R, CLOCK_R, xp, yp, 6.0f, CLOCK_FG);
-  face.drawWideLine(CLOCK_R, CLOCK_R, xp, yp, 2.0f, CLOCK_BG);
-
-  // Draw hour hand
-  getCoord(CLOCK_R, CLOCK_R, &xp, &yp, H_HAND_LENGTH, h_angle);
-  face.drawWideLine(CLOCK_R, CLOCK_R, xp, yp, 6.0f, CLOCK_FG);
-  face.drawWideLine(CLOCK_R, CLOCK_R, xp, yp, 2.0f, CLOCK_BG);
-
-  // Draw the central pivot circle
-  face.fillSmoothCircle(CLOCK_R, CLOCK_R, 4, CLOCK_FG);
-
-  // Draw cecond hand
-  getCoord(CLOCK_R, CLOCK_R, &xp, &yp, S_HAND_LENGTH, s_angle);
-  face.drawWedgeLine(CLOCK_R, CLOCK_R, xp, yp, 2.5, 1.0, SECCOND_FG);
-  face.pushSprite(5, 5, TFT_TRANSPARENT);
+        data->point.x = x;
+        data->point.y = y;
+    }
+     */
 }
 
-// =========================================================================
-// Setup
-// =========================================================================
-void setup() {
-  Serial.begin(115200);
-  Serial.println("Booting...");
-
-  // Initialise the screen
-  tft.init();
-
-  // Ideally set orientation for good viewing angle range because
-  // the anti-aliasing effectiveness varies with screen viewing angle
-  // Usually this is when screen ribbon connector is at the bottom
-  tft.setRotation(0);
-  tft.fillScreen(TFT_BLACK);
-
-  // Create the clock face sprite
-  //face.setColorDepth(8); // 8-bit will work, but reduces effectiveness of anti-aliasing
-  face.createSprite(FACE_W, FACE_H);
-
-  // Only 1 font used in the sprite, so can remain loaded
-  face.loadFont(NotoSansBold15);
-
-  // Draw the whole clock - NTP time not available yet
-  renderFace(time_secs);
-
-  targetTime = millis() + 100;
+/*use Arduinos millis() as tick source*/
+static uint32_t my_tick(void)
+{
+    return millis();
 }
 
-// =========================================================================
-// Loop
-// =========================================================================
-void loop() {
-  // Update time periodically
-  if (targetTime < millis()) {
+void setup()
+{
+    String LVGL_Arduino = "Hello Arduino! ";
+    LVGL_Arduino += String('V') + lv_version_major() + "." + lv_version_minor() + "." + lv_version_patch();
 
-    // Update next tick time in 100 milliseconds for smooth movement
-    targetTime = millis() + 100;
+    Serial.begin( 115200 );
+    Serial.println( LVGL_Arduino );
 
-    // Increment time by 100 milliseconds
-    time_secs += 0.100;
+    lv_init();
 
-    // Midnight roll-over
-    if (time_secs >= (60 * 60 * 24)) time_secs = 0;
+    /*Set a tick source so that LVGL will know how much time elapsed. */
+    lv_tick_set_cb(my_tick);
 
-    // All graphics are drawn in sprite to stop flicker
-    renderFace(time_secs);
+    /* register print function for debugging */
+#if LV_USE_LOG != 0
+    lv_log_register_print_cb( my_print );
+#endif
 
-    // Request time from NTP server and synchronise the local clock
-    // (clock may pause since this may take >100ms)
-    syncTime();
-  }
+    lv_display_t * disp;
+#if LV_USE_TFT_ESPI
+    /*TFT_eSPI can be enabled lv_conf.h to initialize the display in a simple way*/
+    disp = lv_tft_espi_create(TFT_HOR_RES, TFT_VER_RES, draw_buf, sizeof(draw_buf));
+    lv_display_set_rotation(disp, TFT_ROTATION);
+
+#else
+    /*Else create a display yourself*/
+    disp = lv_display_create(TFT_HOR_RES, TFT_VER_RES);
+    lv_display_set_flush_cb(disp, my_disp_flush);
+    lv_display_set_buffers(disp, draw_buf, NULL, sizeof(draw_buf), LV_DISPLAY_RENDER_MODE_PARTIAL);
+#endif
+
+    /*Initialize the (dummy) input device driver*/
+    lv_indev_t * indev = lv_indev_create();
+    lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER); /*Touchpad should have POINTER type*/
+    lv_indev_set_read_cb(indev, my_touchpad_read);
+
+    /* Create a simple label
+     * ---------------------
+     lv_obj_t *label = lv_label_create( lv_screen_active() );
+     lv_label_set_text( label, "Hello Arduino, I'm LVGL!" );
+     lv_obj_align( label, LV_ALIGN_CENTER, 0, 0 );
+
+     * Try an example. See all the examples
+     *  - Online: https://docs.lvgl.io/master/examples.html
+     *  - Source codes: https://github.com/lvgl/lvgl/tree/master/examples
+     * ----------------------------------------------------------------
+
+     lv_example_btn_1();
+
+     * Or try out a demo. Don't forget to enable the demos in lv_conf.h. E.g. LV_USE_DEMO_WIDGETS
+     * -------------------------------------------------------------------------------------------
+
+     lv_demo_widgets();
+     */
+
+    lv_obj_t *label = lv_label_create( lv_screen_active() );
+    lv_label_set_text( label, "Hello Arduino, I'm LVGL!" );
+    lv_obj_align( label, LV_ALIGN_CENTER, 0, 0 );
+
+    Serial.println( "Setup done" );
+}
+
+void loop()
+{
+    lv_timer_handler(); /* let the GUI do its work */
+    delay(5); /* let this time pass */
 }
