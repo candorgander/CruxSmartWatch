@@ -487,7 +487,7 @@
 #define LV_FONT_MONTSERRAT_42 0
 #define LV_FONT_MONTSERRAT_44 0
 #define LV_FONT_MONTSERRAT_46 0
-#define LV_FONT_MONTSERRAT_48 0
+#define LV_FONT_MONTSERRAT_48 1
 
 /*Demonstrate special features*/
 #define LV_FONT_MONTSERRAT_28_COMPRESSED 0  /*bpp = 3*/
@@ -1031,7 +1031,7 @@
 
 /*Drivers for LCD devices connected via SPI/parallel port*/
 #define LV_USE_ST7735        0
-#define LV_USE_ST7789        0
+#define LV_USE_ST7789        1
 #define LV_USE_ST7796        0
 #define LV_USE_ILI9341       0
 
