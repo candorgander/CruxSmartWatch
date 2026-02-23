@@ -12,89 +12,19 @@
 
 #define GRAVITY_MS2 9.81
 
-// --- Gyroscope Bias Variables (radians/s) ---
-float gyroBiasX = 0.0;
-float gyroBiasY = 0.0;
-float gyroBiasZ = 0.0;
+// // --- Gyroscope Bias Variables (radians/s) ---
+// float gyroBiasX = 0.0;
+// float gyroBiasY = 0.0;
+// float gyroBiasZ = 0.0;
 
-// --- Accelerometer Bias Variables (m/s^2) ---
-float accelBiasX = 0.0;
-float accelBiasY = 0.0;
-float accelBiasZ = 0.0;
+// // --- Accelerometer Bias Variables (m/s^2) ---
+// float accelBiasX = 0.0;
+// float accelBiasY = 0.0;
+// float accelBiasZ = 0.0;
 
 Adafruit_LSM6DSOX imu;
 
-void getBias()
-{
-    float sumGyroX = 0.0;
-    float sumGyroY = 0.0;
-    float sumGyroZ = 0.0;
-    float sumAccelX = 0.0;
-    float sumAccelY = 0.0;
-    float sumAccelZ = 0.0;
-
-    float rawGyroX = 0.0;
-    float rawGyroY = 0.0;
-    float rawGyroZ = 0.0;
-    float rawAccelX = 0.0;
-    float rawAccelY = 0.0;
-    float rawAccelZ = 0.0;
-
-    for (int i = 0; i < CALIBRATION_SAMPLES; i++)
-    {
-        // imu.getEvent(&accel, &gyro, &temp); // Get raw readings
-        imu.readGyroscope(rawGyroX, rawGyroY, rawGyroZ);
-        imu.readAcceleration(rawAccelX, rawAccelY, rawAccelZ);
-
-        sumGyroX += rawGyroX;
-        sumGyroY += rawGyroY;
-        sumGyroZ += rawGyroZ;
-
-        sumAccelX += rawAccelX;
-        sumAccelY += rawAccelY;
-        sumAccelZ += rawAccelZ;
-
-        delay(CALIBRATION_DELAY_MS);
-        if (i % (CALIBRATION_SAMPLES / 10) == 0)
-        { // Print progress 10 times
-            Serial.print(".");
-        }
-    }
-
-    // --- Calculate Gyro Bias ---
-    // Gyroscope bias is simply the average reading when stationary.
-    gyroBiasX = sumGyroX / CALIBRATION_SAMPLES;
-    gyroBiasY = sumGyroY / CALIBRATION_SAMPLES;
-    gyroBiasZ = sumGyroZ / CALIBRATION_SAMPLES;
-
-    // --- Calculate Accelerometer Bias ---
-    // The accelerometer should ideally read 0 m/s^2 on X and Y axes when level.
-    // The Z-axis should read +GRAVITY or -GRAVITY m/s^2.
-    // So, bias is the average reading minus the expected value.
-
-    float avgAccelX = sumAccelX / CALIBRATION_SAMPLES;
-    float avgAccelY = sumAccelY / CALIBRATION_SAMPLES;
-    float avgAccelZ = sumAccelZ / CALIBRATION_SAMPLES;
-
-    accelBiasX = avgAccelX - 0.0; // Expected X acceleration is 0 m/s^2
-    accelBiasY = avgAccelY - 0.0; // Expected Y acceleration is 0 m/s^2
-
-    // Expected Z acceleration is +GRAVITY m/s^2 if sensor Z-axis is pointing UP.
-    // If your sensor Z-axis points DOWN during calibration, use -GRAVITY.
-    accelBiasZ = avgAccelZ - GRAVITY; // Adjust based on your IMU's default orientation relative to gravity
-
-    // Example for if Z-axis is pointing down during calibration:
-    // accelBiasZ = avgAccelZ - (-GRAVITY);
-
-#ifdef DEBUG_INFO
-    Serial.println("\n\nBias Values:");
-    Serial.printf("Avg AX: %f , Avg AY: %f , Avg AZ: %f\n", avgAccelX, avgAccelY, avgAccelZ);
-    Serial.printf("GX: %f , GY: %f , GZ: %f\n", gyroBiasX, gyroBiasY, gyroBiasZ);
-    Serial.printf("AX: %f , AY: %f , AZ: %f\n", accelBiasX, accelBiasY, accelBiasZ);
-#endif
-}
-
-void getSensorReading(float &ax, float &ay, float &az, float &gx, float &gy, float &gz)
+void getIMUReading(float &ax, float &ay, float &az, float &gx, float &gy, float &gz)
 {
     float rawGyroX = 0.0;
     float rawGyroY = 0.0;
@@ -110,21 +40,17 @@ void getSensorReading(float &ax, float &ay, float &az, float &gx, float &gy, flo
 // TODO: Add Baro Code
 #endif
 
-    gx = rawGyroX - gyroBiasX;
-    gy = rawGyroY - gyroBiasY;
-    gz = rawGyroZ - gyroBiasZ;
+    gx = rawGyroX;
+    gy = rawGyroY;
+    gz = rawGyroZ;
 
     // ax = (rawAccelX - accelBiasX) * GRAVITY_MS2;
     // ay = (rawAccelY - accelBiasY) * GRAVITY_MS2;
     // az = (rawAccelZ - accelBiasZ) * GRAVITY_MS2;
 
-    ax = (rawAccelX - accelBiasX);
-    ay = (rawAccelY - accelBiasY);
-    az = (rawAccelZ - accelBiasZ);
-
-#ifdef BARO_ENABLE
-// TODO: Add Baro Code
-#endif
+    ax = (rawAccelX);
+    ay = (rawAccelY);
+    az = (rawAccelZ);
 }
 
 void sensorDataStream()
@@ -139,7 +65,7 @@ void sensorDataStream()
     // imu.readGyroscope(rawGyroX, rawGyroY, rawGyroZ);
     // imu.readAcceleration(rawAccelX, rawAccelY, rawAccelZ);
 
-    getSensorReading(rawAccelX, rawAccelY, rawAccelZ, rawGyroX, rawGyroY, rawGyroZ);
+    getIMUReading(rawAccelX, rawAccelY, rawAccelZ, rawGyroX, rawGyroY, rawGyroZ);
 
     Serial.print("\t\tAccel X: ");
     Serial.print(rawAccelX);
@@ -162,13 +88,14 @@ void sensorDataStream()
     delay(10);
 }
 
-void setupSensors()
+void setupIMU()
 {
     Wire.setPins(IMU_SDA, IMU_SCL);
-    Wire.setClock(400000);
+    // Wire.setClock(400000);
 
     if (!imu.begin_I2C())
     {
+        Serial.println("IMU Setup Failed!");
         while (1)
         {
             delay(10);
