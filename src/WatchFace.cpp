@@ -206,7 +206,6 @@ void buttonTest()
         lv_obj_add_event_cb(btn, menu_item_cb, LV_EVENT_FOCUSED, (void *)menu_items[i]);
         lv_obj_add_event_cb(btn, menu_item_cb, LV_EVENT_CLICKED, (void *)menu_items[i]);
 
-
         lv_group_add_obj(group, btn);
     }
 
@@ -215,4 +214,36 @@ void buttonTest()
     relaseLVGLMutex();
 
     // lv_screen_load(main_screen);
+}
+
+void buttontest2()
+{
+    takeLVGLMutex();
+    TRACE();
+    lv_indev_t *indev = lv_indev_create();
+    lv_indev_set_type(indev, LV_INDEV_TYPE_KEYPAD);
+    lv_indev_set_read_cb(indev, touchcb);
+    lv_indev_set_disp(indev, disp);
+
+    static lv_group_t *group = lv_group_create();
+    lv_group_set_default(group);
+    lv_indev_set_group(indev, group);
+
+    list1 = lv_list_create(lv_screen_active());
+    lv_obj_center(list1);
+    lv_obj_t *btn;
+    lv_list_add_text(list1, "File");
+    btn = lv_list_add_button(list1, LV_SYMBOL_FILE, "New");
+    lv_obj_add_event_cb(btn, menu_item_cb, LV_EVENT_KEY, (void *)"New");
+    lv_obj_add_event_cb(btn, menu_item_cb, LV_EVENT_FOCUSED, (void *)"New");
+    lv_group_add_obj(group, btn);
+    btn = lv_list_add_button(list1, LV_SYMBOL_DIRECTORY, "Open");
+    lv_obj_add_event_cb(btn, menu_item_cb, LV_EVENT_KEY, (void *)"Open");
+    lv_obj_add_event_cb(btn, menu_item_cb, LV_EVENT_FOCUSED, (void *)"Open");
+    lv_group_add_obj(group, btn);
+
+    lv_group_add_obj(group, list1);
+    lv_group_focus_next(group);
+
+    relaseLVGLMutex();
 }
