@@ -9,15 +9,16 @@
 // #include <TFT_eSPI.h>
 // #endif
 
-#include "dp1.h"
-#include "Builder.h"
+// #include "dp1.h"
+// #include "Builder.h"
 
 #include "Display.h"
 #include "IMU.h"
 #include "Touch.h"
-#include "WatchFace.h"
+#include "UI/UI.h"
+// #include "WatchFace.h"
 
-Adafruit_NeoPixel strip(1, 21, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip(1, 21, NEO_RGB + NEO_KHZ800);
 
 void setup()
 {
@@ -28,36 +29,25 @@ void setup()
   strip.begin();
   strip.setBrightness(15);
   strip.show();
-  delay(5000);
+  // delay(5000);
   Serial.println("Starting Up...");
-  TRACE();
+  // TRACE();
   // Serial.println(LVGL_Arduino);
 
   setupTouch();
-  TRACE();
+  // TRACE();
 
   setupDisplay();
 
-  TRACE();
+  // TRACE();
 
-  delay(2000);
+  delay(1000);
 
-  // lv_obj_t *label = lv_label_create(lv_screen_active());
-  // lv_label_set_text(label, "BOOT OK");
-  // lv_obj_center(label);
-
-  // delay(2000);
-
-  // setupIMU();
-
-  // ShowWatchFace();
-  // showSettingsPage();
-
-  buttontest2();
+  drawUI();
 
   Serial.println("Setup done");
 
-  strip.setPixelColor(0, 255, 0, 0);
+  strip.setPixelColor(0, 0, 255, 0);
   strip.show();
 
   startLVGLTask();

@@ -5,10 +5,12 @@
 #include <TFT_eSPI.h>
 #endif
 
-#include "dp1.h"
-#include "Builder.h"
+// #include "dp1.h"
+// #include "Builder.h"
 
-#include "RTOS.h"
+#include "UI/UI.h"
+#include "Touch.h"
+
 
 /*Set to your screen resolution and rotation*/
 #define TFT_HOR_RES 240
@@ -21,22 +23,25 @@ uint32_t draw_buf[DRAW_BUF_SIZE / 4];
 
 lv_display_t *disp;
 
-// /* LVGL calls it when a rendered image needs to copied to the display*/
-// void my_disp_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
-// {
-//     /*Copy `px map` to the `area`*/
+lv_indev_t *touchpad;
+static lv_key_t lastKey = LV_KEY_NEXT;
 
-//     /*For example ("my_..." functions needs to be implemented by you)
-//     uint32_t w = lv_area_get_width(area);
-//     uint32_t h = lv_area_get_height(area);
+SemaphoreHandle_t lvgl_mutex;
 
-//     my_set_window(area->x1, area->y1, w, h);
-//     my_draw_bitmaps(px_map, w * h);
-//      */
+void setupRTOS()
+{
+    lvgl_mutex = xSemaphoreCreateMutex();
+}
 
-//     /*Call it to tell LVGL you are ready*/
-//     lv_display_flush_ready(disp);
-// }
+bool takeLVGLMutex()
+{
+    return xSemaphoreTake(lvgl_mutex, portMAX_DELAY);
+}
+
+bool relaseLVGLMutex()
+{
+    return xSemaphoreGive(lvgl_mutex);
+}
 
 /*use Arduinos millis() as tick source*/
 static uint32_t my_tick(void)
@@ -55,6 +60,53 @@ void displayTask(void *pvparameters)
         }
         vTaskDelay(50);
     }
+}
+
+void touchcb(lv_indev_t *indev, lv_indev_data_t *data)
+{
+    bool next = keystate(LV_KEY_NEXT);
+    bool prev = keystate(LV_KEY_PREV);
+
+    if (next)
+    {
+        data->key = LV_KEY_NEXT;
+        data->state = LV_INDEV_STATE_PRESSED;
+    }
+    else if (prev)
+    {
+        data->key = LV_KEY_PREV;
+        data->state = LV_INDEV_STATE_PRESSED;
+    }
+    else
+    {
+        data->key = lastKey; // hold the last key during release
+        data->state = LV_INDEV_STATE_RELEASED;
+    }
+
+    if (data->state == LV_INDEV_STATE_PRESSED)
+        lastKey = (lv_key_t)data->key;
+}
+
+void setupTouchIndev()
+{
+    takeLVGLMutex();
+
+    touchpad = lv_indev_create();
+    lv_indev_set_type(touchpad, LV_INDEV_TYPE_KEYPAD);
+    lv_indev_set_read_cb(touchpad, touchcb);
+    lv_indev_set_disp(touchpad, disp);
+
+    relaseLVGLMutex();
+}
+
+lv_indev_t* getTouchpad()
+{
+    return touchpad;
+}
+
+lv_display_t* getDisplay()
+{
+    return disp;
 }
 
 void setupDisplay()
@@ -77,6 +129,8 @@ void setupDisplay()
     /*TFT_eSPI can be enabled lv_conf.h to initialize the display in a simple way*/
     disp = lv_tft_espi_create(TFT_HOR_RES, TFT_VER_RES, draw_buf, sizeof(draw_buf));
     lv_display_set_rotation(disp, TFT_ROTATION);
+
+    setupTouchIndev();
 }
 
 void startLVGLTask()

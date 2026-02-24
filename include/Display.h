@@ -1,6 +1,11 @@
 #pragma once
 
+void setupRTOS();
+bool takeLVGLMutex();
+bool relaseLVGLMutex();
+
 void setupDisplay();
 void startLVGLTask();
 
-extern lv_display_t *disp;
+lv_indev_t* getTouchpad();
+lv_display_t* getDisplay();
